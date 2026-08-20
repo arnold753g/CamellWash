@@ -1,0 +1,2 @@
+<template><main class="error-page"><div><div class="error-code">{{ error?.statusCode || 500 }}</div><h1>{{ error?.statusCode === 404 ? 'Página no encontrada' : 'Ocurrió un error' }}</h1><p class="muted">{{ error?.statusCode === 404 ? 'La ruta solicitada no existe.' : 'Intenta nuevamente o vuelve al inicio.' }}</p><Button label="Volver al inicio" icon="pi pi-home" @click="clearError({ redirect: '/' })" /></div></main></template>
+<script setup lang="ts">import Button from 'primevue/button'; defineProps<{ error: { statusCode?: number } }>(); useHead({ title: 'Error' })</script>

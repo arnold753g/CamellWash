@@ -1,0 +1,28 @@
+{
+  "name": "starter-frontend",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "nuxt build",
+    "dev": "nuxt dev",
+    "preview": "nuxt preview",
+    "typecheck": "nuxt typecheck",
+    "test": "nuxt prepare && node --test --experimental-strip-types tests/*.test.ts",
+    "postinstall": "nuxt prepare"
+  },
+  "dependencies": {
+    "@pinia/nuxt": "^0.11.3",
+    "@primevue/themes": "^4.5.0",
+    "nuxt": "^4.2.1",
+    "pinia": "^3.0.4",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.5.0",
+    "vue": "^3.5.25",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "typescript": "^5.9.3",
+    "vue-tsc": "^3.1.4"
+  }
+}
