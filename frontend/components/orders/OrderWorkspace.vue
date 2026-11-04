@@ -89,6 +89,7 @@
       <template v-else-if="selected">
         <Message v-if="detailError" severity="error" class="form-error" :closable="false">{{ detailError }}</Message>
         <div class="order-detail-header">
+          <Button v-if="canManage" label="Ficha del cliente" icon="pi pi-print" outlined @click="navigateTo(`/print/orders/${selected.id}`)" />
           <Tag :value="statusLabel(selected.status)" :severity="statusSeverity(selected.status)" />
           <div class="cluster">
             <Button v-if="canEditSelected" label="Editar" icon="pi pi-pencil" outlined @click="openEdit" />

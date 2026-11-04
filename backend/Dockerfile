@@ -1,4 +1,4 @@
-FROM golang:1.25.12-alpine AS builder
+FROM golang:1.26.10-alpine AS builder
 WORKDIR /src
 RUN apk add --no-cache ca-certificates git
 COPY go.mod go.sum ./
@@ -14,5 +14,5 @@ WORKDIR /app
 COPY --from=builder /out/api /out/migrate /out/seed /app/
 USER app
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD wget --quiet --tries=1 --spider http://localhost:8080/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD wget --quiet --tries=1 -O /dev/null http://localhost:8080/health || exit 1
 CMD ["/app/api"]

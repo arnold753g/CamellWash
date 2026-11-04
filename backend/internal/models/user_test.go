@@ -9,12 +9,12 @@ import (
 func TestValidRoleAcceptsOnlyLavaderoRoles(t *testing.T) {
 	t.Parallel()
 
-	for _, role := range []string{RoleAdmin, RoleManager, RoleWashStaff} {
+	for _, role := range []string{RoleAdmin, RoleManager, RoleWashStaff, RoleAccountant} {
 		if !ValidRole(role) {
 			t.Fatalf("expected role %q to be valid", role)
 		}
 	}
-	for _, role := range []string{"", "user", "administrator", "manager "} {
+	for _, role := range []string{"", "user", "administrator", "manager ", "Accountant", "accountant_admin", "accountant "} {
 		if ValidRole(role) {
 			t.Fatalf("expected role %q to be invalid", role)
 		}

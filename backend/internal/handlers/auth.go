@@ -70,11 +70,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	now := time.Now().UTC()
-	passwordValid := security.CheckPassword(request.Password, user.PasswordHash)
-	if user.LockedUntil != nil && now.Before(*user.LockedUntil) && passwordValid {
+	if user.LockedUntil != nil && now.Before(*user.LockedUntil) {
+		_ = security.CheckPassword(request.Password, h.dummyHash)
 		respond.Error(w, r, http.StatusTooManyRequests, "ACCOUNT_LOCKED", "Too many failed attempts; try again later", nil)
 		return
 	}
+	passwordValid := security.CheckPassword(request.Password, user.PasswordHash)
 	if !passwordValid {
 		lockUntil := now.Add(h.cfg.LoginLockout)
 		_ = h.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(map[string]any{

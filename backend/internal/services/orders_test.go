@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"starter-backend/internal/models"
+
+	"gorm.io/gorm"
 )
 
 func TestOrderStateMachine(t *testing.T) {
@@ -36,5 +38,18 @@ func TestOrderIdentifiersAndMoney(t *testing.T) {
 	_, err := uniqueOrderIDs("staff_ids", nil, 25)
 	if !errors.As(err, &fieldError) || fieldError.Field != "staff_ids" {
 		t.Fatalf("empty staff error=%v", err)
+	}
+}
+
+func TestOrderAccessRejectsReportOnlyAndUnknownRoles(t *testing.T) {
+	t.Parallel()
+	service := NewOrderService(nil)
+	for _, role := range []string{models.RoleAccountant, "", "unknown", "admin "} {
+		t.Run(role, func(t *testing.T) {
+			query, err := service.authorizedQuery(&gorm.DB{}, models.User{ID: 7, Role: role})
+			if !errors.Is(err, ErrOrderForbidden) || query != nil {
+				t.Fatalf("role=%q query=%v error=%v: expected no query and ErrOrderForbidden", role, query, err)
+			}
+		})
 	}
 }

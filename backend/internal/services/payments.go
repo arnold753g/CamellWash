@@ -166,6 +166,12 @@ func (s *PaymentService) Register(ctx context.Context, actor models.User, orderI
 		if err := tx.Create(&payment).Error; err != nil {
 			return fmt.Errorf("register payment: %w", err)
 		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, &payment); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, nil); err != nil {
+			return err
+		}
 		if err := createPaymentEvent(tx, payment.ID, orderID, "REGISTERED", actor.ID, nil); err != nil {
 			return err
 		}
@@ -318,6 +324,15 @@ func (s *PaymentService) Correct(ctx context.Context, actor models.User, payment
 			Status: models.PaymentValid, IdempotencyKey: idempotencyKey, CollectedByUserID: actor.ID,
 			PaidAt: now, ReviewStatus: models.PaymentReviewNotRequired, ReplacesPaymentID: &replacementID}
 		if err := tx.Create(&replacement).Error; err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, &current); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, &replacement); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, nil); err != nil {
 			return err
 		}
 		if err := createPaymentEvent(tx, current.ID, orderID, "VOIDED", actor.ID, &reason); err != nil {

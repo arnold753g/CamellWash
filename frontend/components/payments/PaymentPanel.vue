@@ -23,6 +23,7 @@
         </dl>
         <Message v-if="order.status !== 'FINISHED' && order.status !== 'DELIVERED'" severity="info" :closable="false">Pago registrado al recibir el vehículo. La orden continuará su flujo normal.</Message>
         <div class="cluster payment-actions">
+          <Button label="Recibo y ficha" icon="pi pi-print" outlined @click="openPrint(currentPayment.id)" />
           <Button v-if="order.status === 'FINISHED'" label="Entregar vehículo" icon="pi pi-check-circle" :loading="submitting" @click="confirmDelivery" />
           <Button label="Corregir pago" icon="pi pi-sync" severity="secondary" outlined :disabled="submitting" @click="openCorrection" />
           <Button v-if="order.status !== 'DELIVERED'" label="Anular pago" icon="pi pi-times" severity="danger" outlined :disabled="submitting" @click="openVoid" />
@@ -40,6 +41,7 @@
           <div class="cluster"><Tag value="Anulado" severity="danger" /><Tag :value="reviewLabel(payment.review_status)" :severity="reviewSeverity(payment.review_status)" /></div>
           <p>{{ payment.amount }} · {{ methodLabel(payment.method) }} · {{ formatDate(payment.paid_at) }}</p>
           <p>{{ payment.void_reason }}</p>
+          <Button label="Consultar recibo anulado" icon="pi pi-print" size="small" severity="secondary" outlined @click="openPrint(payment.id)" />
         </div>
       </details>
     </template>
@@ -91,6 +93,10 @@
         <Button label="Confirmar anulación" icon="pi pi-times" severity="danger" :loading="submitting" @click="submitVoid" />
       </template>
     </Dialog>
+    <Dialog v-model:visible="printOfferVisible" modal header="Comprobantes del pago" :style="smallDialogStyle">
+      <p>El pago quedó registrado. Prepara el recibo y la ficha del cliente para papel de 80 mm.</p>
+      <template #footer><Button label="Más tarde" severity="secondary" outlined @click="printOfferVisible = false" /><Button label="Abrir recibo y ficha" icon="pi pi-print" @click="openPrint(printPaymentID)" /></template>
+    </Dialog>
   </section>
 </template>
 
@@ -124,6 +130,9 @@ const formError = ref('')
 const formErrors = reactive<Record<string, string>>({})
 const paymentVisible = ref(false)
 const voidVisible = ref(false)
+const printOfferVisible = ref(false)
+const printPaymentID = ref(0)
+const openPrint = (paymentID: number) => navigateTo(`/print/orders/${props.order.id}?payment_id=${paymentID}`)
 const voidReason = ref('')
 const paymentMode = ref<'register' | 'correct'>('register')
 const paymentForm = reactive({ method: 'CASH' as PaymentMethod, external_reference: '', reason: '', deliver: false, idempotency_key: '' })
@@ -172,6 +181,7 @@ const submitPayment = async () => {
     if (response.data?.order) emit('order-updated', response.data.order)
     paymentVisible.value = false; toast.add({ severity: 'success', summary: paymentMode.value === 'register' ? 'Pago registrado' : 'Pago corregido', life: 3500 })
     await loadPayments()
+    if (response.data?.payment) { printPaymentID.value = response.data.payment.id; printOfferVisible.value = true }
   } catch (error) { const parsed = apiError(error); formError.value = parsed.message; Object.assign(formErrors, parsed.fields || {}) }
   finally { submitting.value = false }
 }

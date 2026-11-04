@@ -24,7 +24,7 @@
       <div class="error-recovery"><span>{{ errorMessage }}</span><Button label="Reintentar" icon="pi pi-refresh" severity="secondary" outlined @click="loadReports" /></div>
     </Message>
     <LoadingState v-else-if="loading" />
-    <EmptyState v-else-if="!operational || !hasReportData" title="Todavía no hay actividad en este periodo" description="Cambia el rango o registra nuevas órdenes para comenzar a ver indicadores." />
+    <EmptyState v-else-if="!operational || !hasReportData" title="Todavía no hay actividad en este periodo" description="Cambia el rango para consultar otros periodos." />
     <div v-else class="report-content">
       <section aria-labelledby="operational-title">
         <div class="section-heading">
@@ -82,7 +82,7 @@
 
       <section v-if="financial" aria-labelledby="financial-title">
         <div class="section-heading">
-          <div><span class="section-kicker">Solo Administrador</span><h2 id="financial-title">Resumen financiero</h2></div>
+          <div><span class="section-kicker">Finanzas</span><h2 id="financial-title">Resumen financiero</h2></div>
           <Button v-if="reportMode" label="Exportar finanzas" icon="pi pi-download" severity="secondary" outlined @click="exportFinancial" />
         </div>
         <div class="metric-grid metric-grid--financial">
@@ -145,7 +145,8 @@ const subtitle = computed(() => props.reportMode
   ? 'Analiza el desempeño por periodo. Los límites usan la zona horaria America/La_Paz.'
   : 'La operación actual y los resultados del día, sin estimaciones ni datos duplicados.')
 const hasReportData = computed(() => Boolean(operational.value && (
-  operational.value.summary.orders_received || operational.value.summary.orders_delivered || operational.value.summary.orders_cancelled || operational.value.summary.active_orders
+  operational.value.summary.orders_received || operational.value.summary.orders_delivered || operational.value.summary.orders_cancelled || operational.value.summary.active_orders ||
+  financial.value?.summary.payments || financial.value?.summary.voided_count
 )))
 const maxStatus = computed(() => Math.max(1, ...(operational.value?.status.map(item => item.count) || [0])))
 const maxServices = computed(() => Math.max(1, ...(operational.value?.top_services.map(item => item.uses) || [0])))
@@ -167,7 +168,7 @@ async function loadReports () {
   const query = new URLSearchParams({ date_from: filters.dateFrom, date_to: filters.dateTo }).toString()
   try {
     if (props.showFinancial) {
-      const response = await auth.request<DashboardReport>(`/admin/dashboard?${query}`)
+      const response = await auth.request<DashboardReport>(`/reports/dashboard?${query}`)
       operational.value = response.data?.operational || null
       financial.value = response.data?.financial || null
     } else {
@@ -229,6 +230,7 @@ onMounted(loadReports)
 .timezone-badge { display: inline-flex; align-items: center; gap: var(--space-2); padding: .55rem .75rem; border: 1px solid rgba(255,85,0,.22); border-radius: 999px; background: var(--color-primary-soft); white-space: nowrap; }
 .report-filters { display: grid; grid-template-columns: repeat(2, minmax(10rem, 13rem)) auto; align-items: end; gap: var(--space-4); margin-bottom: var(--space-6); padding: var(--space-4); border: 1px solid var(--color-border-soft); border-radius: var(--radius-lg); background: var(--color-surface); }
 .report-content { display: grid; gap: var(--space-10); }
+.report-content > section { min-width: 0; }
 .section-heading { margin-bottom: var(--space-5); }
 .section-heading h2 { margin: .2rem 0 0; font-size: clamp(1.45rem, 3vw, 2rem); }
 .metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-5); }

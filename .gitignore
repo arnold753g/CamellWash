@@ -74,3 +74,11 @@ backups/
 ._*
 Thumbs.db
 Desktop.ini
+
+/.deployment/
+
+# Python deployment utilities
+__pycache__/
+
+# Temporary ACME challenge files
+/nginx/acme/
