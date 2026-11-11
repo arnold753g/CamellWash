@@ -21,6 +21,7 @@ type Order struct {
 	EstimatedDeliveryAt time.Time      `json:"estimated_delivery_at"`
 	Status              string         `json:"status"`
 	Total               string         `gorm:"type:numeric(12,2)" json:"total"`
+	InvoiceRequested    bool           `json:"invoice_requested"`
 	Version             uint64         `json:"version"`
 	Services            []OrderService `gorm:"foreignKey:OrderID" json:"services"`
 	Staff               []User         `gorm:"many2many:order_staff;joinForeignKey:OrderID;joinReferences:UserID" json:"staff"`

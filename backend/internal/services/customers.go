@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/mail"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -38,6 +39,7 @@ type ClientInput struct {
 	FullName string
 	CI       *string
 	Phone    string
+	Email    *string
 }
 
 type VehicleInput struct {
@@ -54,6 +56,7 @@ type ClientDetail struct {
 	CI           string    `json:"ci"`
 	CIProvided   bool      `json:"ci_provided"`
 	Phone        string    `json:"phone"`
+	Email        *string   `json:"email"`
 	VehicleCount int64     `json:"vehicle_count"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -132,6 +135,18 @@ func NormalizePhone(value string) (string, error) {
 	return phone, nil
 }
 
+func NormalizeClientEmail(value *string) (*string, error) {
+	if value == nil || strings.TrimSpace(*value) == "" {
+		return nil, nil
+	}
+	email := strings.ToLower(strings.TrimSpace(*value))
+	address, err := mail.ParseAddress(email)
+	if err != nil || address.Address != email || len(email) > 254 {
+		return nil, FieldError{Field: "email", Message: "Enter a valid email address of at most 254 characters"}
+	}
+	return &email, nil
+}
+
 func NormalizePlate(value *string) (*string, error) {
 	if value == nil || strings.TrimSpace(*value) == "" {
 		return nil, nil
@@ -195,9 +210,11 @@ func (s *CustomerService) UpdateClient(ctx context.Context, id uint64, input Cli
 	if err != nil {
 		return ClientDetail{}, err
 	}
-	result := s.db.WithContext(ctx).Model(&models.Client{}).Where("id = ?", id).Updates(map[string]any{
-		"full_name": client.FullName, "ci": client.CI, "phone": client.Phone,
-	})
+	updates := map[string]any{"full_name": client.FullName, "ci": client.CI, "phone": client.Phone}
+	if input.Email != nil {
+		updates["email"] = client.Email
+	}
+	result := s.db.WithContext(ctx).Model(&models.Client{}).Where("id = ?", id).Updates(updates)
 	if errors.Is(result.Error, gorm.ErrDuplicatedKey) {
 		return ClientDetail{}, ErrCIExists
 	}
@@ -223,7 +240,11 @@ func normalizedClient(input ClientInput) (models.Client, error) {
 	if err != nil {
 		return models.Client{}, err
 	}
-	return models.Client{FullName: name, CI: ci, Phone: phone}, nil
+	email, err := NormalizeClientEmail(input.Email)
+	if err != nil {
+		return models.Client{}, err
+	}
+	return models.Client{FullName: name, CI: ci, Phone: phone, Email: email}, nil
 }
 
 func (s *CustomerService) GetClient(ctx context.Context, id uint64) (ClientDetail, error) {
@@ -243,7 +264,7 @@ func (s *CustomerService) GetClient(ctx context.Context, id uint64) (ClientDetai
 
 func clientDetail(client models.Client, vehicleCount int64) ClientDetail {
 	ci, provided := ClientCIForDisplay(client.CI)
-	return ClientDetail{ID: client.ID, FullName: client.FullName, CI: ci, CIProvided: provided, Phone: client.Phone,
+	return ClientDetail{ID: client.ID, FullName: client.FullName, CI: ci, CIProvided: provided, Phone: client.Phone, Email: client.Email,
 		VehicleCount: vehicleCount, CreatedAt: client.CreatedAt, UpdatedAt: client.UpdatedAt}
 }
 

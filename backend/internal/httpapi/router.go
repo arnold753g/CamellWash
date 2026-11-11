@@ -30,6 +30,7 @@ func New(db *gorm.DB, cfg config.Config, logger *slog.Logger) (http.Handler, err
 	orderHandler := handlers.NewOrderHandler(services.NewOrderService(db))
 	paymentHandler := handlers.NewPaymentHandler(services.NewPaymentService(db))
 	reportHandler := handlers.NewReportHandler(services.NewReportService(db))
+	documentHandler := handlers.NewDocumentHandler(services.NewDocumentService(db))
 
 	router.HandleFunc("/health", handlers.Health).Methods(http.MethodGet)
 
@@ -50,6 +51,7 @@ func New(db *gorm.DB, cfg config.Config, logger *slog.Logger) (http.Handler, err
 	protected.HandleFunc("/me/password", authHandler.ChangePassword).Methods(http.MethodPost)
 
 	catalogs := protected.PathPrefix("/catalogs").Subrouter()
+	catalogs.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleManager, models.RoleWashStaff))
 	catalogs.HandleFunc("/vehicle-types", catalogHandler.ActiveVehicleTypes).Methods(http.MethodGet)
 	catalogs.HandleFunc("/service-categories", catalogHandler.ActiveServiceCategories).Methods(http.MethodGet)
 	catalogs.HandleFunc("/services", catalogHandler.ActiveServices).Methods(http.MethodGet)
@@ -75,6 +77,7 @@ func New(db *gorm.DB, cfg config.Config, logger *slog.Logger) (http.Handler, err
 	vehicles.HandleFunc("/{id:[0-9]+}/orders", orderHandler.VehicleHistory).Methods(http.MethodGet)
 
 	orders := protected.PathPrefix("/orders").Subrouter()
+	orders.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleManager, models.RoleWashStaff))
 	orders.HandleFunc("", orderHandler.List).Methods(http.MethodGet)
 	orders.HandleFunc("", orderHandler.Create).Methods(http.MethodPost)
 	orders.HandleFunc("/{id:[0-9]+}", orderHandler.Get).Methods(http.MethodGet)
@@ -88,14 +91,33 @@ func New(db *gorm.DB, cfg config.Config, logger *slog.Logger) (http.Handler, err
 	payments.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleManager))
 	payments.HandleFunc("/{id:[0-9]+}/void", paymentHandler.Void).Methods(http.MethodPost)
 	payments.HandleFunc("/{id:[0-9]+}/correct", paymentHandler.Correct).Methods(http.MethodPost)
+	payments.HandleFunc("/{id:[0-9]+}/documents/receipt", documentHandler.IssueReceipt).Methods(http.MethodPost)
+
+	reception := protected.PathPrefix("/reception").Subrouter()
+	reception.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleManager))
+	reception.HandleFunc("/orders/{id:[0-9]+}/document", documentHandler.IssueReception).Methods(http.MethodPost)
+
+	documents := protected.PathPrefix("/documents").Subrouter()
+	documents.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleManager))
+	documents.HandleFunc("/{id:[0-9]+}", documentHandler.Get).Methods(http.MethodGet)
+	documents.HandleFunc("/{id:[0-9]+}/print-attempts", documentHandler.Print).Methods(http.MethodPost)
 
 	operations := protected.PathPrefix("/operations").Subrouter()
+	operations.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleManager))
 	operations.HandleFunc("/wash-staff", orderHandler.AvailableStaff).Methods(http.MethodGet)
 	operations.HandleFunc("/service-options", orderHandler.AvailableServices).Methods(http.MethodGet)
 
 	reports := protected.PathPrefix("/reports").Subrouter()
-	reports.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleManager))
-	reports.HandleFunc("/operations", reportHandler.Operational).Methods(http.MethodGet)
+	reports.Handle("/operations", middleware.RequireRoles(models.RoleAdmin, models.RoleManager, models.RoleAccountant)(http.HandlerFunc(reportHandler.Operational))).Methods(http.MethodGet)
+	reports.Handle("/dashboard", middleware.RequireRoles(models.RoleAdmin, models.RoleAccountant)(http.HandlerFunc(reportHandler.Dashboard))).Methods(http.MethodGet)
+	reports.Handle("/orders", middleware.RequireRoles(models.RoleAdmin, models.RoleAccountant)(http.HandlerFunc(reportHandler.AccountingOrders))).Methods(http.MethodGet)
+	reports.Handle("/financial", middleware.RequireRoles(models.RoleAdmin, models.RoleAccountant)(http.HandlerFunc(reportHandler.Financial))).Methods(http.MethodGet)
+
+	accountingClients := protected.PathPrefix("/accountant/clients").Subrouter()
+	accountingClients.Use(middleware.RequireRoles(models.RoleAdmin, models.RoleAccountant))
+	accountingClients.HandleFunc("", customerHandler.ListClients).Methods(http.MethodGet)
+	accountingClients.HandleFunc("/{id:[0-9]+}", customerHandler.GetClient).Methods(http.MethodGet)
+	accountingClients.HandleFunc("/{id:[0-9]+}/vehicles", customerHandler.ListVehicles).Methods(http.MethodGet)
 
 	admin := protected.PathPrefix("/admin").Subrouter()
 	admin.Use(middleware.RequireRoles(models.RoleAdmin))

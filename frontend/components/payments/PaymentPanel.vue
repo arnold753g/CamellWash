@@ -17,12 +17,14 @@
         <dl class="detail-grid">
           <div class="detail-item"><dt>Monto pagado</dt><dd class="payment-amount">{{ currentPayment.amount }}</dd></div>
           <div class="detail-item"><dt>Método</dt><dd>{{ methodLabel(currentPayment.method) }}</dd></div>
+          <div class="detail-item"><dt>Solicitud de factura</dt><dd>{{ currentPayment.invoice_requested ? 'Solicitada' : 'No solicitada' }}</dd></div>
           <div class="detail-item"><dt>Fecha</dt><dd>{{ formatDate(currentPayment.paid_at) }}</dd></div>
           <div class="detail-item"><dt>Cobrado por</dt><dd>{{ userName(currentPayment.collected_by) }}</dd></div>
           <div v-if="currentPayment.external_reference" class="detail-item"><dt>Referencia</dt><dd>{{ currentPayment.external_reference }}</dd></div>
         </dl>
         <Message v-if="order.status !== 'FINISHED' && order.status !== 'DELIVERED'" severity="info" :closable="false">Pago registrado al recibir el vehículo. La orden continuará su flujo normal.</Message>
         <div class="cluster payment-actions">
+          <Button label="Recibo y ficha" icon="pi pi-print" outlined @click="openPrint(currentPayment.id)" />
           <Button v-if="order.status === 'FINISHED'" label="Entregar vehículo" icon="pi pi-check-circle" :loading="submitting" @click="confirmDelivery" />
           <Button label="Corregir pago" icon="pi pi-sync" severity="secondary" outlined :disabled="submitting" @click="openCorrection" />
           <Button v-if="order.status !== 'DELIVERED'" label="Anular pago" icon="pi pi-times" severity="danger" outlined :disabled="submitting" @click="openVoid" />
@@ -40,6 +42,8 @@
           <div class="cluster"><Tag value="Anulado" severity="danger" /><Tag :value="reviewLabel(payment.review_status)" :severity="reviewSeverity(payment.review_status)" /></div>
           <p>{{ payment.amount }} · {{ methodLabel(payment.method) }} · {{ formatDate(payment.paid_at) }}</p>
           <p>{{ payment.void_reason }}</p>
+          <Button label="Consultar recibo anulado" icon="pi pi-print" size="small" severity="secondary" outlined @click="openPrint(payment.id)" />
+          <p>Factura: {{ payment.invoice_requested ? 'solicitada' : 'no solicitada' }}</p>
         </div>
       </details>
     </template>
@@ -67,6 +71,13 @@
           <Textarea id="payment-correction-reason" v-model="paymentForm.reason" rows="3" maxlength="500" auto-resize :invalid="Boolean(formErrors.reason)" />
           <small v-if="formErrors.reason" class="field-error">{{ formErrors.reason }}</small>
         </div>
+        <div class="form-field">
+          <div class="checkbox-row">
+            <Checkbox v-model="paymentForm.invoice_requested" input-id="payment-invoice" binary aria-describedby="payment-invoice-help" />
+            <label for="payment-invoice">Solicita factura</label>
+          </div>
+          <small id="payment-invoice-help" class="form-help">Marca si el cliente quiere factura. Esta opción registra la solicitud; no emite una factura.</small>
+        </div>
         <div v-if="paymentMode === 'register' && order.status === 'FINISHED'" class="checkbox-row">
           <Checkbox v-model="paymentForm.deliver" input-id="payment-deliver" binary />
           <label for="payment-deliver">Entregar el vehículo al confirmar este pago</label>
@@ -90,6 +101,10 @@
         <Button label="Volver" severity="secondary" outlined :disabled="submitting" @click="voidVisible = false" />
         <Button label="Confirmar anulación" icon="pi pi-times" severity="danger" :loading="submitting" @click="submitVoid" />
       </template>
+    </Dialog>
+    <Dialog v-model:visible="printOfferVisible" modal header="Comprobantes del pago" :style="smallDialogStyle">
+      <p>El pago quedó registrado. Puedes imprimir el recibo y la ficha del cliente en papel de 80 mm.</p>
+      <template #footer><Button label="Más tarde" severity="secondary" outlined @click="printOfferVisible = false" /><Button label="Abrir recibo y ficha" icon="pi pi-print" @click="openPrint(printPaymentID)" /></template>
     </Dialog>
   </section>
 </template>
@@ -124,9 +139,12 @@ const formError = ref('')
 const formErrors = reactive<Record<string, string>>({})
 const paymentVisible = ref(false)
 const voidVisible = ref(false)
+const printOfferVisible = ref(false)
+const printPaymentID = ref(0)
+const openPrint = (paymentID: number) => navigateTo(`/print/orders/${props.order.id}?payment_id=${paymentID}`)
 const voidReason = ref('')
 const paymentMode = ref<'register' | 'correct'>('register')
-const paymentForm = reactive({ method: 'CASH' as PaymentMethod, external_reference: '', reason: '', deliver: false, idempotency_key: '' })
+const paymentForm = reactive({ method: 'CASH' as PaymentMethod, external_reference: '', reason: '', deliver: false, invoice_requested: false, idempotency_key: '' })
 const smallDialogStyle = { width: 'min(36rem, calc(100vw - 2rem))' }
 const methodOptions = [
   { label: 'Efectivo', value: 'CASH' }, { label: 'QR', value: 'QR' },
@@ -147,13 +165,13 @@ const loadPayments = async () => {
 }
 const newOperationKey = () => `payment_${crypto.randomUUID().replaceAll('-', '_')}`
 const openRegistration = () => {
-  paymentMode.value = 'register'; resetPaymentForm(); paymentForm.deliver = props.order.status === 'FINISHED'; paymentForm.idempotency_key = newOperationKey(); paymentVisible.value = true
+  paymentMode.value = 'register'; resetPaymentForm(); paymentForm.invoice_requested = props.order.invoice_requested; paymentForm.deliver = props.order.status === 'FINISHED'; paymentForm.idempotency_key = newOperationKey(); paymentVisible.value = true
 }
 const openCorrection = () => {
-  paymentMode.value = 'correct'; resetPaymentForm(); paymentForm.method = currentPayment.value?.method || 'CASH'; paymentForm.external_reference = currentPayment.value?.external_reference || ''; paymentForm.idempotency_key = newOperationKey(); paymentVisible.value = true
+  paymentMode.value = 'correct'; resetPaymentForm(); paymentForm.method = currentPayment.value?.method || 'CASH'; paymentForm.external_reference = currentPayment.value?.external_reference || ''; paymentForm.invoice_requested = currentPayment.value?.invoice_requested ?? false; paymentForm.idempotency_key = newOperationKey(); paymentVisible.value = true
 }
 const openVoid = () => { clearErrors(); voidReason.value = ''; formError.value = ''; voidVisible.value = true }
-const resetPaymentForm = () => { Object.assign(paymentForm, { method: 'CASH', external_reference: '', reason: '', deliver: false, idempotency_key: '' }); clearErrors(); formError.value = '' }
+const resetPaymentForm = () => { Object.assign(paymentForm, { method: 'CASH', external_reference: '', reason: '', deliver: false, invoice_requested: false, idempotency_key: '' }); clearErrors(); formError.value = '' }
 const clearErrors = () => { Object.keys(formErrors).forEach(key => delete formErrors[key]) }
 
 const submitPayment = async () => {
@@ -166,12 +184,13 @@ const submitPayment = async () => {
   try {
     const path = paymentMode.value === 'register' ? `/orders/${props.order.id}/payments` : `/payments/${currentPayment.value!.id}/correct`
     const body = paymentMode.value === 'register'
-      ? { version: props.order.version, method: paymentForm.method, external_reference: paymentForm.external_reference, idempotency_key: paymentForm.idempotency_key, deliver: paymentForm.deliver }
-      : { version: props.order.version, method: paymentForm.method, external_reference: paymentForm.external_reference, idempotency_key: paymentForm.idempotency_key, reason: paymentForm.reason }
+      ? { version: props.order.version, method: paymentForm.method, external_reference: paymentForm.external_reference, idempotency_key: paymentForm.idempotency_key, deliver: paymentForm.deliver, invoice_requested: paymentForm.invoice_requested }
+      : { version: props.order.version, method: paymentForm.method, external_reference: paymentForm.external_reference, idempotency_key: paymentForm.idempotency_key, reason: paymentForm.reason, invoice_requested: paymentForm.invoice_requested }
     const response = await auth.request<PaymentResult>(path, { method: 'POST', body })
     if (response.data?.order) emit('order-updated', response.data.order)
     paymentVisible.value = false; toast.add({ severity: 'success', summary: paymentMode.value === 'register' ? 'Pago registrado' : 'Pago corregido', life: 3500 })
     await loadPayments()
+    if (response.data?.payment) { printPaymentID.value = response.data.payment.id; printOfferVisible.value = true }
   } catch (error) { const parsed = apiError(error); formError.value = parsed.message; Object.assign(formErrors, parsed.fields || {}) }
   finally { submitting.value = false }
 }

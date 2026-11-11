@@ -15,6 +15,7 @@ export interface Payment {
   external_reference: string | null
   status: PaymentStatus
   delivery_requested: boolean
+  invoice_requested: boolean
   collected_by_user_id: number
   collected_by: User
   paid_at: string

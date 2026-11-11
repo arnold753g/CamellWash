@@ -17,6 +17,7 @@ type clientRequest struct {
 	FullName string  `json:"full_name"`
 	CI       *string `json:"ci"`
 	Phone    string  `json:"phone"`
+	Email    *string `json:"email"`
 }
 
 type vehicleRequest struct {

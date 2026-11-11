@@ -40,43 +40,22 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import { roleHomePath, roleLabel as labelForRole, roleNavigation } from '~/utils/role-access'
 
-interface NavigationItem { label: string, to: string, icon: string }
-
-const props = defineProps<{ mode: 'admin' | 'staff' }>()
 const auth = useAuthStore()
 const branding = useBranding()
 const menuOpen = ref(false)
 const loggingOut = ref(false)
 const hydrated = ref(false)
-const homePath = computed(() => props.mode === 'admin' ? '/admin' : '/app')
-const roleLabels = { admin: 'Administrador', manager: 'Encargado', wash_staff: 'Personal de lavado' } as const
+const homePath = computed(() => hydrated.value ? roleHomePath(auth.user?.role) : '/')
 const displayName = computed(() => hydrated.value ? auth.fullName : '')
-const roleLabel = computed(() => hydrated.value && auth.user ? roleLabels[auth.user.role] : '')
+const roleLabel = computed(() => hydrated.value && auth.user ? labelForRole(auth.user.role) : '')
 const userInitials = computed(() => {
   if (!hydrated.value) return 'U'
   const names = [auth.user?.first_name, auth.user?.last_name].filter(Boolean)
   return names.map(value => String(value).charAt(0).toUpperCase()).join('').slice(0, 2) || 'U'
 })
-const items = computed<NavigationItem[]>(() => props.mode === 'admin'
-  ? [
-      { label: 'Dashboard', to: '/admin', icon: 'pi pi-home' },
-      { label: 'Reportes', to: '/admin/reports', icon: 'pi pi-chart-bar' },
-      { label: 'Usuarios', to: '/admin/users', icon: 'pi pi-users' },
-      { label: 'Catálogos', to: '/admin/catalogs', icon: 'pi pi-list' },
-      { label: 'Precios', to: '/admin/prices', icon: 'pi pi-dollar' },
-      { label: 'Clientes', to: '/admin/clients', icon: 'pi pi-id-card' },
-      { label: 'Órdenes', to: '/admin/orders', icon: 'pi pi-clipboard' },
-      { label: 'Revisión de pagos', to: '/admin/payment-reviews', icon: 'pi pi-verified' },
-      { label: 'Mi perfil', to: '/app/profile', icon: 'pi pi-user' }
-    ]
-  : [
-      { label: 'Inicio', to: '/app', icon: 'pi pi-home' },
-      ...(hydrated.value && auth.user?.role === 'manager' ? [{ label: 'Reportes', to: '/app/reports', icon: 'pi pi-chart-bar' }] : []),
-      ...(hydrated.value && auth.user?.role === 'manager' ? [{ label: 'Clientes', to: '/app/clients', icon: 'pi pi-id-card' }] : []),
-      { label: 'Órdenes', to: '/app/orders', icon: 'pi pi-clipboard' },
-      { label: 'Mi perfil', to: '/app/profile', icon: 'pi pi-user' }
-    ])
+const items = computed(() => hydrated.value ? roleNavigation(auth.user?.role) : [])
 
 const logout = async () => {
   loggingOut.value = true

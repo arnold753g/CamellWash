@@ -3,9 +3,10 @@ package models
 import "time"
 
 const (
-	RoleAdmin     = "admin"
-	RoleManager   = "manager"
-	RoleWashStaff = "wash_staff"
+	RoleAdmin      = "admin"
+	RoleManager    = "manager"
+	RoleWashStaff  = "wash_staff"
+	RoleAccountant = "accountant"
 
 	StatusActive   = "active"
 	StatusInactive = "inactive"
@@ -27,7 +28,7 @@ type User struct {
 }
 
 func ValidRole(role string) bool {
-	return role == RoleAdmin || role == RoleManager || role == RoleWashStaff
+	return role == RoleAdmin || role == RoleManager || role == RoleWashStaff || role == RoleAccountant
 }
 
 func (User) TableName() string { return "users" }

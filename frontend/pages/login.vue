@@ -52,7 +52,7 @@ import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
 import { z } from 'zod'
-import { safeInternalRedirect } from '~/utils/auth-session'
+import { roleRedirect } from '~/utils/role-access'
 
 definePageMeta({ layout: false, middleware: 'guest' })
 useHead({ title: 'Iniciar sesión' })
@@ -83,7 +83,6 @@ const submit = async () => {
     errorMessage.value = response.error?.message || 'No se pudo iniciar sesión'
     return
   }
-  const fallback = auth.isAdmin ? '/admin' : '/app'
-  await navigateTo(safeInternalRedirect(route.query.redirect, fallback))
+  await navigateTo(roleRedirect(auth.user?.role, route.query.redirect))
 }
 </script>

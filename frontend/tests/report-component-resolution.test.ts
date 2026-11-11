@@ -5,7 +5,7 @@ import test from 'node:test'
 
 const files = [
   'pages/admin/index.vue', 'pages/admin/reports/index.vue', 'pages/app/index.vue', 'pages/app/reports/index.vue',
-  'components/reports/DashboardReportWorkspace.vue', 'components/app/AppShell.vue'
+  'components/reports/DashboardReportWorkspace.vue', 'components/app/AppShell.vue', 'pages/accountant/index.vue'
 ]
 
 test('dashboard y reportes renderizan el panel real para cada rol autorizado', async () => {
@@ -17,8 +17,11 @@ test('dashboard y reportes renderizan el panel real para cada rol autorizado', a
   for (const contract of ['data-testid="dashboard-report-workspace"', '<LoadingState', '<EmptyState', 'severity="error"', 'Exportar operación', 'Exportar finanzas']) {
     assert.ok(sources[4]!.includes(contract), `Falta el contrato visual ${contract}`)
   }
-  assert.match(sources[5]!, /\/admin\/reports/)
-  assert.match(sources[5]!, /\/app\/reports/)
+  assert.match(sources[5]!, /roleNavigation\(auth\.user\?\.role\)/)
+  assert.match(sources[6]!, /<DashboardReportWorkspace show-financial report-mode/)
+  assert.match(sources[6]!, /middleware: 'accountant'/)
+  assert.match(sources[4]!, /\/reports\/dashboard\?/)
+  assert.doesNotMatch(sources[4]!, /\/admin\/dashboard\?/)
 })
 
 test('la marca Camell Wash usa el logo oficial y el token naranja aprobado', async () => {

@@ -1,8 +1,9 @@
 <template>
   <section data-testid="customer-vehicle-workspace">
     <div class="page-heading">
-      <h1>Clientes y vehículos</h1>
-      <p>Registra a cada cliente y sus vehículos. El CI y la placa son opcionales; los datos ausentes nunca se sustituyen por identificadores ficticios.</p>
+      <h1>{{ readOnly ? 'Consulta de clientes' : 'Clientes y vehículos' }}</h1>
+      <p v-if="readOnly">Consulta las fichas, los datos de contacto y los vehículos de los clientes.</p>
+      <p v-else>Registra a cada cliente y sus vehículos. El CI y la placa son opcionales; los datos ausentes nunca se sustituyen por identificadores ficticios.</p>
     </div>
 
     <div class="toolbar">
@@ -14,7 +15,7 @@
         <Button label="Buscar" icon="pi pi-search" :loading="loading" @click="applySearch" />
         <Button v-if="search" label="Limpiar" icon="pi pi-filter-slash" severity="secondary" outlined @click="clearSearch" />
       </div>
-      <Button label="Nuevo cliente" icon="pi pi-user-plus" @click="openClientCreate" />
+      <Button v-if="!readOnly" label="Nuevo cliente" icon="pi pi-user-plus" @click="openClientCreate" />
     </div>
 
     <Message v-if="errorMessage" severity="error" :closable="false">
@@ -40,7 +41,7 @@
       <Paginator :rows="pagination.limit" :total-records="pagination.total" :first="(pagination.page - 1) * pagination.limit" @page="changePage" />
     </template>
 
-    <Dialog v-model:visible="clientDialogVisible" modal :header="editingClientID ? 'Editar cliente' : 'Registrar cliente'" :style="dialogStyle" @hide="resetClientForm">
+    <Dialog v-if="!readOnly" v-model:visible="clientDialogVisible" modal :header="editingClientID ? 'Editar cliente' : 'Registrar cliente'" :style="dialogStyle" @hide="resetClientForm">
       <Message v-if="clientFormError" severity="error" class="form-error" :closable="false">{{ clientFormError }}</Message>
       <form id="client-form" class="stack" novalidate @submit.prevent="saveClient">
         <div class="form-field">
@@ -61,6 +62,11 @@
             <small v-if="clientErrors.phone" class="field-error" role="alert">{{ clientErrors.phone }}</small>
           </div>
         </div>
+        <div class="form-field">
+          <label for="client-email">Correo electrónico (opcional)</label>
+          <InputText id="client-email" v-model="clientForm.email" type="email" autocomplete="email" maxlength="254" :invalid="Boolean(clientErrors.email)" placeholder="cliente@correo.com" />
+          <small v-if="clientErrors.email" class="field-error" role="alert">{{ clientErrors.email }}</small>
+        </div>
       </form>
       <template #footer>
         <Button label="Cancelar" severity="secondary" outlined :disabled="savingClient" @click="clientDialogVisible = false" />
@@ -75,19 +81,20 @@
         <div class="detail-heading">
           <div><h2>{{ selectedClient.full_name }}</h2><p class="muted">Cliente interno #{{ selectedClient.id }}</p></div>
           <div class="cluster">
-            <Button label="Historial de órdenes" icon="pi pi-history" outlined @click="openClientOrders" />
-            <Button label="Editar cliente" icon="pi pi-pencil" outlined @click="openClientEdit" />
+            <Button v-if="!readOnly" label="Historial de órdenes" icon="pi pi-history" outlined @click="openClientOrders" />
+            <Button v-if="!readOnly" label="Editar cliente" icon="pi pi-pencil" outlined @click="openClientEdit" />
           </div>
         </div>
         <dl class="detail-grid customer-detail-grid">
           <div class="detail-item"><dt>CI</dt><dd>{{ selectedClient.ci }}</dd></div>
           <div class="detail-item"><dt>Teléfono</dt><dd>{{ selectedClient.phone }}</dd></div>
+          <div class="detail-item"><dt>Correo electrónico</dt><dd>{{ selectedClient.email || 'No proporcionado' }}</dd></div>
           <div class="detail-item"><dt>Vehículos registrados</dt><dd>{{ selectedClient.vehicle_count }}</dd></div>
         </dl>
 
         <div class="section-heading">
           <div><h3>Vehículos</h3><p>Los vehículos sin placa se identifican temporalmente por su ID interno.</p></div>
-          <Button label="Agregar vehículo" icon="pi pi-plus" @click="openVehicleCreate" />
+          <Button v-if="!readOnly" label="Agregar vehículo" icon="pi pi-plus" @click="openVehicleCreate" />
         </div>
         <Message v-if="vehicleListError" severity="error" :closable="false">{{ vehicleListError }}</Message>
         <LoadingState v-if="vehiclesLoading" />
@@ -97,13 +104,13 @@
             <Column header="Identificación"><template #body="{ data }"><strong>{{ vehicleLabel(data) }}</strong></template></Column>
             <Column header="Tipo"><template #body="{ data }">{{ data.vehicle_type.name }}</template></Column>
             <Column header="Descripción"><template #body="{ data }">{{ vehicleDescription(data) }}</template></Column>
-            <Column header="Acciones"><template #body="{ data }"><div class="cluster"><Button label="Órdenes" icon="pi pi-history" size="small" outlined @click="openVehicleOrders(data.id)" /><Button label="Editar" icon="pi pi-pencil" size="small" outlined @click="openVehicleEdit(data)" /></div></template></Column>
+            <Column v-if="!readOnly" header="Acciones"><template #body="{ data }"><div class="cluster"><Button label="Órdenes" icon="pi pi-history" size="small" outlined @click="openVehicleOrders(data.id)" /><Button label="Editar" icon="pi pi-pencil" size="small" outlined @click="openVehicleEdit(data)" /></div></template></Column>
           </DataTable>
         </div>
       </template>
     </Dialog>
 
-    <Dialog v-model:visible="vehicleDialogVisible" modal :header="editingVehicleID ? 'Editar vehículo' : 'Agregar vehículo'" :style="dialogStyle" @hide="resetVehicleForm">
+    <Dialog v-if="!readOnly" v-model:visible="vehicleDialogVisible" modal :header="editingVehicleID ? 'Editar vehículo' : 'Agregar vehículo'" :style="dialogStyle" @hide="resetVehicleForm">
       <Message v-if="vehicleFormError" severity="error" class="form-error" :closable="false">{{ vehicleFormError }}</Message>
       <Message v-if="editingVehicleID" severity="info" :closable="false">El propietario no puede modificarse en esta versión.</Message>
       <form id="vehicle-form" class="stack" novalidate @submit.prevent="saveVehicle">
@@ -154,6 +161,8 @@ import type { CatalogItem } from '~/types/catalogs'
 import type { ClientDetail, ClientListItem, ClientPage, Vehicle, VehiclePage } from '~/types/customers'
 import { apiError } from '~/utils/api-error'
 
+const props = withDefaults(defineProps<{ readOnly?: boolean }>(), { readOnly: false })
+const clientBase = computed(() => props.readOnly ? '/accountant/clients' : '/clients')
 const auth = useAuthStore()
 const toast = useToast()
 const dialogStyle = { width: 'min(42rem, calc(100vw - 2rem))' }
@@ -169,7 +178,7 @@ const editingClientID = ref<number | null>(null)
 const savingClient = ref(false)
 const clientFormError = ref('')
 const clientErrors = reactive<Record<string, string>>({})
-const clientForm = reactive({ full_name: '', ci: '', phone: '' })
+const clientForm = reactive({ full_name: '', ci: '', phone: '', email: '' })
 
 const detailVisible = ref(false)
 const detailLoading = ref(false)
@@ -191,6 +200,7 @@ const vehicleTypeOptions = computed(() => vehicleTypes.value.map(item => ({ labe
 const clientSchema = z.object({
   full_name: z.string().trim().min(2, 'Ingresa al menos 2 caracteres').max(150, 'Usa como máximo 150 caracteres'),
   ci: z.string().trim().refine(value => value === '' || /^(?!00000000$)[A-Za-z0-9 -]{4,30}$/.test(value), 'Usa 4 a 20 letras o números; 00000000 está reservado'),
+  email: z.string().trim().max(254, 'Usa como máximo 254 caracteres').refine(value => value === '' || z.string().email().safeParse(value).success, 'Ingresa un correo válido'),
   phone: z.string().trim().refine(value => /^\+?[0-9 ()-]{7,22}$/.test(value), 'Ingresa entre 7 y 15 dígitos')
 })
 const vehicleSchema = z.object({
@@ -207,7 +217,7 @@ const loadClients = async () => {
   try {
     const query = new URLSearchParams({ page: String(pagination.page), limit: String(pagination.limit) })
     if (search.value) query.set('search', search.value)
-    const response = await auth.request<ClientPage>(`/clients?${query}`)
+    const response = await auth.request<ClientPage>(`${clientBase.value}?${query}`)
     clients.value = response.data?.clients || []
     Object.assign(pagination, response.data?.pagination)
   } catch (error) {
@@ -229,12 +239,12 @@ const openClientCreate = () => { resetClientForm(); clientDialogVisible.value = 
 const openClientEdit = () => {
   if (!selectedClient.value) return
   editingClientID.value = selectedClient.value.id
-  Object.assign(clientForm, { full_name: selectedClient.value.full_name, ci: selectedClient.value.ci_provided ? selectedClient.value.ci : '', phone: selectedClient.value.phone })
+  Object.assign(clientForm, { full_name: selectedClient.value.full_name, ci: selectedClient.value.ci_provided ? selectedClient.value.ci : '', phone: selectedClient.value.phone, email: selectedClient.value.email || '' })
   clientDialogVisible.value = true
 }
 const resetClientForm = () => {
   editingClientID.value = null
-  Object.assign(clientForm, { full_name: '', ci: '', phone: '' })
+  Object.assign(clientForm, { full_name: '', ci: '', phone: '', email: '' })
   clientFormError.value = ''
   clearErrors(clientErrors)
 }
@@ -259,6 +269,7 @@ const saveClient = async () => {
 }
 
 const loadVehicleTypes = async () => {
+  if (props.readOnly) return
   if (vehicleTypes.value.length) return
   const response = await auth.request<{ vehicle_types: CatalogItem[] }>('/catalogs/vehicle-types')
   vehicleTypes.value = response.data?.vehicle_types || []
@@ -268,7 +279,7 @@ const loadVehicles = async () => {
   vehiclesLoading.value = true
   vehicleListError.value = ''
   try {
-    const response = await auth.request<VehiclePage>(`/clients/${selectedClient.value.id}/vehicles?limit=100`)
+    const response = await auth.request<VehiclePage>(`${clientBase.value}/${selectedClient.value.id}/vehicles?limit=100`)
     vehicles.value = response.data?.vehicles || []
   } catch (error) { vehicles.value = []; vehicleListError.value = apiError(error).message }
   finally { vehiclesLoading.value = false }
@@ -279,7 +290,7 @@ const openDetail = async (id: number) => {
   detailError.value = ''
   vehicles.value = []
   try {
-    const [response] = await Promise.all([auth.request<ClientDetail>(`/clients/${id}`), loadVehicleTypes()])
+    const [response] = await Promise.all([auth.request<ClientDetail>(`${clientBase.value}/${id}`), loadVehicleTypes()])
     selectedClient.value = response.data || null
     await loadVehicles()
   } catch (error) { detailError.value = apiError(error).message }

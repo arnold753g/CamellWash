@@ -8,6 +8,7 @@ type Client struct {
 	CI           *string   `gorm:"size:30" json:"ci"`
 	NormalizedCI *string   `gorm:"->" json:"-"`
 	Phone        string    `gorm:"size:16;not null" json:"phone"`
+	Email        *string   `gorm:"size:254" json:"email"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

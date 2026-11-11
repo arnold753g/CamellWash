@@ -110,6 +110,15 @@ Fuente funcional: [`GUIA_UNICA_SISTEMA_LAVADERO.md`](GUIA_UNICA_SISTEMA_LAVADERO
 - [x] Completar revisión visual con datos temporales y eliminar el entorno aislado.
 - [ ] Recibir aprobación expresa antes de iniciar el Módulo 8.
 
+## Ampliación autorizada — solicitud de factura al cobrar (2026-10-31)
+
+- [x] Añadir casilla desmarcada por defecto y mostrar la elección en detalle e historial.
+- [x] Guardar `invoice_requested` mediante migración 11, conservando compatibilidad con cobros anteriores.
+- [x] Conservar la elección en correcciones y proteger los reintentos con datos diferentes.
+- [x] Verificar persistencia, permisos, correcciones e historial mediante PostgreSQL/HTTP aislado.
+- [x] Aplicar la migración a la base local.
+- La emisión fiscal y SIAT siguen fuera del alcance.
+
 ## Módulo 8 — cierre
 
 - [ ] Pendiente; no añadir funciones nuevas.

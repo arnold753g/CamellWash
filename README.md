@@ -264,6 +264,8 @@ El pago temprano no cambia el estado operativo. Al retirar, el cobro y `FINISHED
 
 Una anulación del Encargado queda pendiente en `/admin/payment-reviews`. El Administrador la revisa después sin detener el trabajo. Los pagos entregados solo se corrigen mediante reemplazo atómico; no se implementaron devoluciones reales.
 
+Al cobrar se puede marcar **Solicita factura**. La elección se guarda con el pago y se muestra en su detalle e historial; una corrección conserva el valor salvo cambio explícito. Requiere ejecutar la migración 11 antes de iniciar la API actualizada. Esta opción no emite facturas ni se conecta con SIAT. Ver `docs/11-solicitud-factura-en-cobro.md`.
+
 ## Dashboard y reportes
 
 El dashboard diario y los reportes por periodo usan fechas inclusivas de `America/La_Paz`. Órdenes recibidas se cuentan por recepción; entregas y cancelaciones por su transición; el ciclo mide recepción a entrega. Los ingresos suman únicamente pagos `VALID` por fecha de pago y las anulaciones se presentan aparte por fecha de anulación.

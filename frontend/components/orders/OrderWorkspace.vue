@@ -34,6 +34,7 @@
           <Column header="Estado"><template #body="{ data }"><Tag :value="statusLabel(data.status)" :severity="statusSeverity(data.status)" /></template></Column>
           <Column header="Entrega estimada"><template #body="{ data }">{{ formatDate(data.estimated_delivery_at) }}</template></Column>
           <Column header="Total"><template #body="{ data }"><strong>{{ data.total }}</strong></template></Column>
+          <Column v-if="canManage" header="Factura"><template #body="{ data }">{{ data.invoice_requested ? 'Solicitada' : 'No solicitada' }}</template></Column>
           <Column header="Acciones"><template #body="{ data }"><Button label="Ver detalle" icon="pi pi-eye" size="small" outlined @click="openDetail(data.id)" /></template></Column>
         </DataTable>
       </div>
@@ -76,6 +77,13 @@
             <small v-if="formErrors.estimated_delivery_at" class="field-error">{{ formErrors.estimated_delivery_at }}</small>
           </div>
         </div>
+        <div v-if="(!editingOrder || editingOrder.status === 'PENDING') && !editingOrderPaid" class="form-field">
+          <div class="checkbox-row">
+            <Checkbox v-model="form.invoice_requested" input-id="order-invoice" binary aria-describedby="order-invoice-help" />
+            <label for="order-invoice">El cliente solicita factura</label>
+          </div>
+          <small id="order-invoice-help" class="form-help">Desmarcado indica sin solicitud de factura. La elección estará disponible para Contabilidad.</small>
+        </div>
         <div v-if="(!editingOrder || editingOrder.status === 'PENDING') && !editingOrderPaid" class="order-total-preview"><span>Total calculado por el servidor</span><strong>{{ selectedTotal }}</strong></div>
       </form>
       <template #footer>
@@ -89,6 +97,7 @@
       <template v-else-if="selected">
         <Message v-if="detailError" severity="error" class="form-error" :closable="false">{{ detailError }}</Message>
         <div class="order-detail-header">
+          <Button v-if="canManage" label="Ficha del cliente" icon="pi pi-print" outlined @click="navigateTo(`/print/orders/${selected.id}`)" />
           <Tag :value="statusLabel(selected.status)" :severity="statusSeverity(selected.status)" />
           <div class="cluster">
             <Button v-if="canEditSelected" label="Editar" icon="pi pi-pencil" outlined @click="openEdit" />
@@ -102,12 +111,21 @@
           <div class="detail-item"><dt>Recepción</dt><dd>{{ formatDate(selected.received_at) }}</dd></div>
           <div class="detail-item"><dt>Entrega estimada</dt><dd>{{ formatDate(selected.estimated_delivery_at) }}</dd></div>
           <div class="detail-item"><dt>Registrada por</dt><dd>{{ userName(selected.registered_by) }}</dd></div>
+          <div v-if="canManage" class="detail-item"><dt>Solicitud de factura</dt><dd>{{ selected.invoice_requested ? 'Solicitada' : 'No solicitada' }}</dd></div>
           <div class="detail-item"><dt>Versión</dt><dd>{{ selected.version }}</dd></div>
         </dl>
         <div class="detail-section"><h3>Servicios congelados</h3><div class="table-wrap"><DataTable :value="selected.services"><Column field="service_name_snapshot" header="Servicio" /><Column field="price_snapshot" header="Precio congelado" /></DataTable></div><div class="detail-total"><span>Total</span><strong>{{ selected.total }}</strong></div></div>
         <PaymentPanel v-if="canManage" :order="selected" @order-updated="handlePaymentOrderUpdated" @payment-state="hasValidPayment = $event" />
         <div class="detail-section"><h3>Personal asignado</h3><div class="cluster"><Tag v-for="person in selected.staff" :key="person.id" :value="userName(person)" severity="secondary" /></div></div>
         <div class="detail-section"><h3>Historial de estados</h3><ol class="history-list"><li v-for="entry in selected.history" :key="entry.id"><span class="history-dot" /><div><strong>{{ entry.from_status ? `${statusLabel(entry.from_status)} → ` : '' }}{{ statusLabel(entry.to_status) }}</strong><p>{{ formatDate(entry.changed_at) }} · {{ userName(entry.actor) }}</p><p v-if="entry.reason">{{ entry.reason }}</p></div></li></ol></div>
+      </template>
+    </Dialog>
+
+    <Dialog v-model:visible="printOfferVisible" modal header="Orden registrada" :style="smallDialogStyle">
+      <p>La orden #{{ createdOrderID }} quedó registrada. Puedes imprimir su ficha de recepción en papel de 80 mm.</p>
+      <template #footer>
+        <Button label="Más tarde" severity="secondary" outlined @click="printOfferVisible = false" />
+        <Button label="Imprimir orden" icon="pi pi-print" @click="navigateTo(`/print/orders/${createdOrderID}`)" />
       </template>
     </Dialog>
 
@@ -121,6 +139,7 @@
 
 <script setup lang="ts">
 import Button from 'primevue/button'
+import Checkbox from 'primevue/checkbox'
 import Column from 'primevue/column'
 import DataTable from 'primevue/datatable'
 import Dialog from 'primevue/dialog'
@@ -166,12 +185,14 @@ const statusOptions = [
 ] satisfies { label: string, value: OrderStatus }[]
 const activeContext = computed(() => filters.client_id ? `cliente #${filters.client_id}` : filters.vehicle_id ? `vehículo #${filters.vehicle_id}` : '')
 
+const printOfferVisible = ref(false)
+const createdOrderID = ref(0)
 const formVisible = ref(false)
 const saving = ref(false)
 const formError = ref('')
 const formErrors = reactive<Record<string, string>>({})
 const editingOrder = ref<Order | null>(null)
-const form = reactive({ client_id: null as number | null, vehicle_id: null as number | null, service_ids: [] as number[], staff_ids: [] as number[], estimated_delivery_at: '' })
+const form = reactive({ client_id: null as number | null, vehicle_id: null as number | null, service_ids: [] as number[], staff_ids: [] as number[], estimated_delivery_at: '', invoice_requested: false })
 const clients = ref<ClientListItem[]>([])
 const vehicles = ref<Vehicle[]>([])
 const staff = ref<User[]>([])
@@ -244,7 +265,7 @@ const onVehicleChange = async () => {
   } catch (error) { formError.value = apiError(error).message }
 }
 const resetForm = () => {
-  editingOrder.value = null; Object.assign(form, { client_id: null, vehicle_id: null, service_ids: [], staff_ids: [], estimated_delivery_at: defaultEstimatedInput() })
+  editingOrder.value = null; Object.assign(form, { client_id: null, vehicle_id: null, service_ids: [], staff_ids: [], estimated_delivery_at: defaultEstimatedInput(), invoice_requested: false })
   clients.value = []; vehicles.value = []; staff.value = []; availableServices.value = []; formError.value = ''; clearErrors(formErrors)
 }
 const openEdit = async () => {
@@ -252,7 +273,7 @@ const openEdit = async () => {
   editingOrder.value = selected.value; formVisible.value = true; formError.value = ''; clearErrors(formErrors)
   try {
     await loadFormOptions()
-    Object.assign(form, { client_id: selected.value.vehicle.client_id, vehicle_id: selected.value.vehicle_id, service_ids: selected.value.services.map(item => item.service_id), staff_ids: selected.value.staff.map(item => item.id), estimated_delivery_at: laPazDateTimeInput(new Date(selected.value.estimated_delivery_at)) })
+    Object.assign(form, { client_id: selected.value.vehicle.client_id, vehicle_id: selected.value.vehicle_id, service_ids: selected.value.services.map(item => item.service_id), staff_ids: selected.value.staff.map(item => item.id), estimated_delivery_at: laPazDateTimeInput(new Date(selected.value.estimated_delivery_at)), invoice_requested: selected.value.invoice_requested })
     if (selected.value.status === 'PENDING' && !editingOrderPaid.value) {
       const vehicleResponse = await auth.request<VehiclePage>(`/clients/${form.client_id}/vehicles?limit=100`)
       vehicles.value = vehicleResponse.data?.vehicles || []
@@ -276,13 +297,15 @@ const saveOrder = async () => {
     const estimated = `${form.estimated_delivery_at}:00-04:00`
     const body = editingOrder.value
       ? editingOrder.value.status === 'PENDING' && !editingOrderPaid.value
-        ? { version: editingOrder.value.version, vehicle_id: form.vehicle_id, service_ids: form.service_ids, staff_ids: form.staff_ids, estimated_delivery_at: estimated }
+        ? { version: editingOrder.value.version, vehicle_id: form.vehicle_id, service_ids: form.service_ids, staff_ids: form.staff_ids, estimated_delivery_at: estimated, invoice_requested: form.invoice_requested }
         : { version: editingOrder.value.version, staff_ids: form.staff_ids, estimated_delivery_at: estimated }
-      : { vehicle_id: form.vehicle_id, service_ids: form.service_ids, staff_ids: form.staff_ids, estimated_delivery_at: estimated }
+      : { vehicle_id: form.vehicle_id, service_ids: form.service_ids, staff_ids: form.staff_ids, estimated_delivery_at: estimated, invoice_requested: form.invoice_requested }
     const path = editingOrder.value ? `/orders/${editingOrder.value.id}` : '/orders'
     const response = await auth.request<Order>(path, { method: editingOrder.value ? 'PATCH' : 'POST', body })
     toast.add({ severity: 'success', summary: editingOrder.value ? 'Orden actualizada' : 'Orden creada', life: 3500 })
+    const wasCreated = !editingOrder.value
     formVisible.value = false
+    if (wasCreated && response.data) { createdOrderID.value = response.data.id; printOfferVisible.value = true }
     if (response.data && selected.value?.id === response.data.id) selected.value = response.data
     await loadOrders()
   } catch (error) { const parsed = apiError(error); formError.value = parsed.message; Object.assign(formErrors, parsed.fields || {}) }

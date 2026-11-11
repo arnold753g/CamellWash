@@ -35,6 +35,7 @@ export interface Order {
   status: OrderStatus
   total: string
   version: number
+  invoice_requested: boolean
   services: OrderLine[]
   staff: User[]
   history: OrderHistory[]

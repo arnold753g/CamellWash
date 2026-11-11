@@ -122,6 +122,7 @@ import { useToast } from 'primevue/usetoast'
 import { z } from 'zod'
 import type { Role, User, UserStatus } from '~/types/auth'
 import { apiError } from '~/utils/api-error'
+import { roleOptions, roleLabel } from '~/utils/role-access'
 
 interface UserPage { users: User[], pagination: { page: number, limit: number, total: number, total_pages: number } }
 
@@ -132,11 +133,6 @@ const auth = useAuthStore()
 const confirm = useConfirm()
 const toast = useToast()
 const dialogStyle = { width: 'min(40rem, calc(100vw - 2rem))' }
-const roleOptions = [
-  { label: 'Administrador', value: 'admin' },
-  { label: 'Encargado', value: 'manager' },
-  { label: 'Personal de lavado', value: 'wash_staff' }
-] satisfies { label: string, value: Role }[]
 const statusOptions = [
   { label: 'Activo', value: 'active' },
   { label: 'Inactivo', value: 'inactive' }
@@ -168,7 +164,7 @@ const createSchema = z.object({
   password: z.string().min(12, 'Usa al menos 12 caracteres').max(72, 'Usa como máximo 72 caracteres').refine(value => value.trim() === value, 'No uses espacios al inicio o al final'),
   first_name: z.string().trim().min(2, 'Ingresa al menos 2 caracteres').max(100),
   last_name: z.string().trim().min(2, 'Ingresa al menos 2 caracteres').max(100),
-  role: z.enum(['admin', 'manager', 'wash_staff']),
+  role: z.enum(['admin', 'manager', 'wash_staff', 'accountant']),
   status: z.enum(['active', 'inactive'])
 })
 
@@ -253,7 +249,6 @@ const save = async () => {
 }
 
 const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat('es-BO', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'America/La_Paz' }).format(new Date(value)) : 'Sin registro'
-const roleLabel = (role: Role) => roleOptions.find(option => option.value === role)?.label || role
 const roleSeverity = (role: Role) => role === 'admin' ? 'info' : role === 'manager' ? 'warn' : 'secondary'
 const statusLabel = (status: UserStatus) => status === 'active' ? 'Activo' : 'Inactivo'
 

@@ -41,6 +41,7 @@ type RegisterPaymentInput struct {
 	ExternalReference string
 	IdempotencyKey    string
 	Deliver           bool
+	InvoiceRequested  *bool
 }
 
 type VoidPaymentInput struct {
@@ -54,6 +55,7 @@ type CorrectPaymentInput struct {
 	ExternalReference string
 	IdempotencyKey    string
 	Reason            string
+	InvoiceRequested  *bool
 }
 
 type ReviewPaymentInput struct {
@@ -135,7 +137,7 @@ func (s *PaymentService) Register(ctx context.Context, actor models.User, orderI
 		var existing models.Payment
 		existingError := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error
 		if existingError == nil {
-			if existing.OrderID != orderID || existing.Method != method || !sameOptionalText(existing.ExternalReference, reference) || existing.DeliveryRequested != input.Deliver {
+			if existing.OrderID != orderID || existing.Method != method || !sameOptionalText(existing.ExternalReference, reference) || existing.DeliveryRequested != input.Deliver || (input.InvoiceRequested != nil && existing.InvoiceRequested != *input.InvoiceRequested) {
 				return ErrPaymentIdempotencyConflict
 			}
 			payment = existing
@@ -160,11 +162,25 @@ func (s *PaymentService) Register(ctx context.Context, actor models.User, orderI
 		if hasPayment {
 			return ErrPaymentAlreadyExists
 		}
+		invoiceRequested := order.InvoiceRequested
+		if input.InvoiceRequested != nil {
+			invoiceRequested = *input.InvoiceRequested
+		}
 		payment = models.Payment{OrderID: orderID, Amount: order.Total, Method: method, ExternalReference: reference,
 			Status: models.PaymentValid, IdempotencyKey: idempotencyKey, DeliveryRequested: input.Deliver,
+			InvoiceRequested:  invoiceRequested,
 			CollectedByUserID: actor.ID, PaidAt: time.Now().UTC(), ReviewStatus: models.PaymentReviewNotRequired}
 		if err := tx.Create(&payment).Error; err != nil {
 			return fmt.Errorf("register payment: %w", err)
+		}
+		if err := syncOrderInvoiceRequest(tx, &order, invoiceRequested); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, &payment); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, nil); err != nil {
+			return err
 		}
 		if err := createPaymentEvent(tx, payment.ID, orderID, "REGISTERED", actor.ID, nil); err != nil {
 			return err
@@ -287,7 +303,7 @@ func (s *PaymentService) Correct(ctx context.Context, actor models.User, payment
 		var existing models.Payment
 		existingError := tx.Where("idempotency_key = ?", idempotencyKey).First(&existing).Error
 		if existingError == nil {
-			if existing.OrderID != orderID || existing.ReplacesPaymentID == nil || *existing.ReplacesPaymentID != paymentID || existing.Method != method || !sameOptionalText(existing.ExternalReference, reference) {
+			if existing.OrderID != orderID || existing.ReplacesPaymentID == nil || *existing.ReplacesPaymentID != paymentID || existing.Method != method || !sameOptionalText(existing.ExternalReference, reference) || (input.InvoiceRequested != nil && existing.InvoiceRequested != *input.InvoiceRequested) {
 				return ErrPaymentIdempotencyConflict
 			}
 			replacement = existing
@@ -314,10 +330,27 @@ func (s *PaymentService) Correct(ctx context.Context, actor models.User, payment
 			return err
 		}
 		replacementID := current.ID
+		invoiceRequested := current.InvoiceRequested
+		if input.InvoiceRequested != nil {
+			invoiceRequested = *input.InvoiceRequested
+		}
 		replacement = models.Payment{OrderID: orderID, Amount: order.Total, Method: method, ExternalReference: reference,
-			Status: models.PaymentValid, IdempotencyKey: idempotencyKey, CollectedByUserID: actor.ID,
+			InvoiceRequested: invoiceRequested,
+			Status:           models.PaymentValid, IdempotencyKey: idempotencyKey, CollectedByUserID: actor.ID,
 			PaidAt: now, ReviewStatus: models.PaymentReviewNotRequired, ReplacesPaymentID: &replacementID}
 		if err := tx.Create(&replacement).Error; err != nil {
+			return err
+		}
+		if err := syncOrderInvoiceRequest(tx, &order, invoiceRequested); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, &current); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, &replacement); err != nil {
+			return err
+		}
+		if _, err := ensureDocument(tx, actor.ID, orderID, nil); err != nil {
 			return err
 		}
 		if err := createPaymentEvent(tx, current.ID, orderID, "VOIDED", actor.ID, &reason); err != nil {
@@ -464,6 +497,23 @@ func deliverPaidOrder(tx *gorm.DB, order models.Order, actorID uint64) error {
 	reason := "Pago registrado y vehículo entregado"
 	return tx.Create(&models.OrderHistory{OrderID: order.ID, FromStatus: &from, ToStatus: models.OrderDelivered,
 		ChangedAt: time.Now().UTC(), ActorUserID: actorID, Reason: &reason}).Error
+}
+
+func syncOrderInvoiceRequest(tx *gorm.DB, order *models.Order, requested bool) error {
+	if order.InvoiceRequested == requested {
+		return nil
+	}
+	result := tx.Model(&models.Order{}).Where("id = ? AND version = ?", order.ID, order.Version).
+		Updates(map[string]any{"invoice_requested": requested, "version": order.Version + 1})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrPaymentConflict
+	}
+	order.InvoiceRequested = requested
+	order.Version++
+	return nil
 }
 
 func bumpOrderVersion(tx *gorm.DB, order models.Order) error {

@@ -163,12 +163,13 @@ func (h *AdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		if err := tx.First(&current, id).Error; err != nil {
 			return err
 		}
+		emailChanged := current.Email != request.Email
 		if err := tx.Model(&current).Updates(map[string]any{
 			"email": request.Email, "first_name": request.FirstName, "last_name": request.LastName,
 		}).Error; err != nil {
 			return err
 		}
-		if current.Email != request.Email {
+		if emailChanged {
 			now := time.Now().UTC()
 			return tx.Model(&models.Session{}).Where("user_id = ? AND revoked_at IS NULL", id).Update("revoked_at", now).Error
 		}

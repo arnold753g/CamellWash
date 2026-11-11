@@ -27,6 +27,7 @@ type Payment struct {
 	Status            string     `json:"status"`
 	IdempotencyKey    string     `json:"-"`
 	DeliveryRequested bool       `json:"delivery_requested"`
+	InvoiceRequested  bool       `json:"invoice_requested"`
 	CollectedByUserID uint64     `json:"collected_by_user_id"`
 	CollectedBy       User       `gorm:"foreignKey:CollectedByUserID" json:"collected_by"`
 	PaidAt            time.Time  `json:"paid_at"`

@@ -10,6 +10,7 @@ export interface ClientListItem {
 }
 
 export interface ClientDetail extends ClientListItem {
+  email: string | null
   created_at: string
   updated_at: string
 }

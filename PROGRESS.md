@@ -1,6 +1,6 @@
 # Progreso
 
-Última actualización: 2026-08-20.
+Última actualización: 2026-10-31. El estado del entorno y los resultados por módulo de agosto son históricos; la ampliación de cobros se documenta al final.
 
 | Fase | Estado | Evidencia |
 | --- | --- | --- |
@@ -15,6 +15,8 @@
 | 8 — Integración y cierre | NO INICIADO | No se añadieron funciones de la etapa final. |
 
 ## Estado del entorno
+
+Instantánea del 2026-08-20. La ubicación actual es `D:\Users\arnol\Documents\Nueva Version del proyecto\Sistema de Lavadero`; la base local se actualizó a la migración 11 el 2026-10-31. Existe una carpeta `.git`, cuyo contenido no se inspeccionó ni modificó en este cambio.
 
 - Raíz confirmada: `D:\Users\arnol\Documents\Nueva Version del proyecto\Proyecto Base`.
 - Zona horaria propuesta/registrada: `America/La_Paz`.
@@ -45,3 +47,12 @@
 - Módulo 7: E2E aislado aprobó zona `America/La_Paz`, fórmulas sin duplicación, anulaciones separadas, cuatro métodos, rangos válidos, cuatro índices y RBAC; reporte operativo respondió en 55 ms en la corrida final limpia.
 - Dashboard/reportes: marca, logo oficial, naranja `#ff5500`, filtros, tarjetas, barras, tablas, exportación y separación Administrador/Encargado inspeccionados visualmente; las bases y procesos temporales fueron eliminados.
 - Calidad final del Módulo 7: Go test/vet/build, contrato de migración, 15/15 pruebas frontend, typecheck, build de producción, PostgreSQL versión 10 y salud HTTP 200 aprobados.
+
+## Ampliación de cobros — 2026-10-31
+
+- Implementada la casilla «Solicita factura», con persistencia, detalle e historial.
+- Correcciones conservan la elección por defecto y permiten cambiarla con motivo. Los reintentos con otra elección producen conflicto.
+- Migración 11 aplicada a la base local; columna booleana no nula, valor inicial falso.
+- Verificados Go test/vet, 15/15 pruebas frontend, typecheck, build de producción y E2E PostgreSQL/HTTP de órdenes, pagos, reportes y solicitud de factura.
+- La base temporal E2E fue eliminada. No se realizó revisión visual interactiva en esta ampliación.
+- No se emiten facturas fiscales. El cierre del Módulo 8 continúa pendiente.

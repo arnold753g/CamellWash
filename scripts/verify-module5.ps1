@@ -223,10 +223,15 @@ try {
         $stillFinished = (Get-JSON (Invoke-TestRequest 'GET' "/orders/$orderID" $null $managerSession)).data
         if ($stillFinished.status -ne 'FINISHED') { throw 'Failed payment delivered the order' }
 
-        $deliveryPaymentBody = @{ version = $finishedData.version; method = 'QR'; external_reference = 'QR-ORDEN-100'; idempotency_key = 'payment_delivery_order_100'; deliver = $true }
+        Assert-Status (Invoke-TestRequest 'POST' "/orders/$orderID/payments" @{ version = $finishedData.version; method = 'QR'; idempotency_key = 'invalid_invoice_value_001'; invoice_requested = 'yes' } $managerSession $managerHeaders) 400 'Non-boolean invoice request was accepted'
+        $deliveryPaymentBody = @{ version = $finishedData.version; method = 'QR'; external_reference = 'QR-ORDEN-100'; idempotency_key = 'payment_delivery_order_100'; deliver = $true; invoice_requested = $true }
         $deliveryPayment = Invoke-TestRequest 'POST' "/orders/$orderID/payments" $deliveryPaymentBody $managerSession $managerHeaders
         Assert-Status $deliveryPayment 201 'Manager payment and delivery failed'
         $deliveryPaymentData = (Get-JSON $deliveryPayment).data
+        if ($deliveryPaymentData.payment.invoice_requested -ne $true) { throw 'Invoice request was not persisted' }
+        $changedInvoiceBody = $deliveryPaymentBody.Clone()
+        $changedInvoiceBody.invoice_requested = $false
+        Assert-Status (Invoke-TestRequest 'POST' "/orders/$orderID/payments" $changedInvoiceBody $managerSession $managerHeaders) 409 'Retry silently changed invoice request'
         if ($deliveryPaymentData.payment.amount -ne '40.00' -or $deliveryPaymentData.order.status -ne 'DELIVERED') { throw 'Payment amount or atomic delivery is inconsistent' }
         Assert-Status (Invoke-TestRequest 'POST' "/orders/$orderID/payments" $deliveryPaymentBody $managerSession $managerHeaders) 200 'Idempotent payment retry failed'
         Assert-Status (Invoke-TestRequest 'POST' "/orders/$orderID/payments" @{ version = $deliveryPaymentData.order.version; method = 'CASH'; external_reference = ''; idempotency_key = 'second_delivery_payment_01'; deliver = $false } $managerSession $managerHeaders) 409 'Second valid payment was accepted'
@@ -234,6 +239,7 @@ try {
         $deliveredCorrection = Invoke-TestRequest 'POST' "/payments/$($deliveryPaymentData.payment.id)/correct" @{ version = $deliveryPaymentData.order.version; method = 'BANK_TRANSFER'; external_reference = 'TR-200'; idempotency_key = 'corrected_delivery_pay_01'; reason = 'Método registrado incorrectamente' } $managerSession $managerHeaders
         Assert-Status $deliveredCorrection 201 'Delivered payment correction failed'
         $deliveredCorrectionData = (Get-JSON $deliveredCorrection).data
+        if ($deliveredCorrectionData.payment.invoice_requested -ne $true) { throw 'Correction without invoice field lost original request' }
         if ($deliveredCorrectionData.order.status -ne 'DELIVERED' -or $deliveredCorrectionData.payment.amount -ne '40.00') { throw 'Delivered correction broke payment/order consistency' }
         $deliveredPayments = @((Get-JSON (Invoke-TestRequest 'GET' "/orders/$orderID/payments" $null $managerSession)).data.payments)
         if (@($deliveredPayments | Where-Object { $_.status -eq 'VALID' }).Count -ne 1 -or $deliveredPayments.Count -ne 2) { throw 'Correction did not preserve exactly one valid payment' }
@@ -241,6 +247,7 @@ try {
         $earlyPayment = Invoke-TestRequest 'POST' "/orders/$unassignedOrderID/payments" @{ version = 1; method = 'CASH'; external_reference = ''; idempotency_key = 'early_payment_order_001'; deliver = $false } $managerSession $managerHeaders
         Assert-Status $earlyPayment 201 'Early payment failed'
         $earlyPaymentData = (Get-JSON $earlyPayment).data
+        if ($earlyPaymentData.payment.invoice_requested -ne $false) { throw 'Omitted invoice request must default to false' }
         if ($earlyPaymentData.order.status -ne 'PENDING' -or $earlyPaymentData.payment.amount -ne '14.90') { throw 'Early payment changed state or amount' }
         Assert-Status (Invoke-TestRequest 'PATCH' "/orders/$unassignedOrderID" @{ version = 1; service_ids = @($first.service_id); staff_ids = @($washOneID); estimated_delivery_at = $later } $managerSession $managerHeaders) 409 'Paid order services were changed'
         Assert-Status (Invoke-TestRequest 'POST' "/orders/$unassignedOrderID/cancel" @{ version = 1; reason = 'Cliente solicita cancelar' } $managerSession $managerHeaders) 409 'Paid order was cancelled without voiding payment'
@@ -350,6 +357,19 @@ try {
         Write-Output "MODULE7_E2E_OK timezone=America/La_Paz operational=admin+manager financial=admin_only totals=no_duplicates voids=separate methods=4 dates=validated indexes=4 response_ms=$($watch.ElapsedMilliseconds)"
     }
 
+    if ($VerifyPayments) {
+        $invoiceOrder = (Get-JSON (Invoke-TestRequest 'GET' "/orders/$orderID" $null $managerSession)).data
+        $invoiceCorrectionBody = @{ version = $invoiceOrder.version; method = 'BANK_TRANSFER'; external_reference = 'TR-200'; idempotency_key = 'invoice_choice_correction_001'; reason = 'Cliente no solicita factura'; invoice_requested = $false }
+        $invoiceCorrection = Invoke-TestRequest 'POST' "/payments/$($deliveredCorrectionData.payment.id)/correct" $invoiceCorrectionBody $managerSession $managerHeaders
+        Assert-Status $invoiceCorrection 201 'Invoice request correction failed'
+        if ((Get-JSON $invoiceCorrection).data.payment.invoice_requested -ne $false) { throw 'Explicit false was not saved' }
+        Assert-Status (Invoke-TestRequest 'POST' "/payments/$($deliveredCorrectionData.payment.id)/correct" $invoiceCorrectionBody $managerSession $managerHeaders) 200 'Invoice correction retry failed'
+        $invoiceCorrectionBody.invoice_requested = $true
+        Assert-Status (Invoke-TestRequest 'POST' "/payments/$($deliveredCorrectionData.payment.id)/correct" $invoiceCorrectionBody $managerSession $managerHeaders) 409 'Correction retry changed invoice request'
+        $invoiceHistory = @((Get-JSON (Invoke-TestRequest 'GET' "/orders/$orderID/payments" $null $managerSession)).data.payments)
+        if (@($invoiceHistory | Where-Object { $_.status -eq 'VALID' -and $_.invoice_requested -eq $false }).Count -ne 1 -or @($invoiceHistory | Where-Object { $_.status -eq 'VOIDED' -and $_.invoice_requested -eq $true }).Count -ne 2) { throw 'Invoice request history was not preserved' }
+        Write-Output 'INVOICE_REQUEST_E2E_OK true=false+true default=false correction=preserve+change retries=conflict history=preserved invalid_type=400'
+    }
     Write-Output 'E2E_OK migration_twice=ok atomic_create=201 total=40.00 snapshots=name+price mass_assignment=400 missing_price=422 duplicates=422 idor=404 transitions=valid roles=protected concurrency=200/409 history=append_only cancellation=reason+terminal edits=state_limited delivery=payment_blocked histories=client+vehicle'
 } finally {
     if ((Get-Location).Path -eq $backendRoot) { Pop-Location }

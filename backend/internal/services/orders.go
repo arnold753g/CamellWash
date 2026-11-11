@@ -36,6 +36,7 @@ type CreateOrderInput struct {
 	ServiceIDs          []uint64
 	StaffIDs            []uint64
 	EstimatedDeliveryAt time.Time
+	InvoiceRequested    bool
 }
 
 type UpdateOrderInput struct {
@@ -44,6 +45,7 @@ type UpdateOrderInput struct {
 	ServiceIDs          *[]uint64
 	StaffIDs            *[]uint64
 	EstimatedDeliveryAt *time.Time
+	InvoiceRequested    *bool
 }
 
 type TransitionOrderInput struct {
@@ -119,7 +121,7 @@ func (s *OrderService) Create(ctx context.Context, actor models.User, input Crea
 			return err
 		}
 		created = models.Order{VehicleID: vehicle.ID, RegisteredByUserID: actor.ID, ReceivedAt: now,
-			EstimatedDeliveryAt: input.EstimatedDeliveryAt.UTC(), Status: models.OrderPending, Total: total, Version: 1}
+			EstimatedDeliveryAt: input.EstimatedDeliveryAt.UTC(), Status: models.OrderPending, Total: total, Version: 1, InvoiceRequested: input.InvoiceRequested}
 		if err := tx.Create(&created).Error; err != nil {
 			return fmt.Errorf("create order: %w", err)
 		}
@@ -141,7 +143,8 @@ func (s *OrderService) Create(ctx context.Context, actor models.User, input Crea
 		if err := tx.Create(&history).Error; err != nil {
 			return fmt.Errorf("create initial history: %w", err)
 		}
-		return nil
+		_, err = ensureDocument(tx, actor.ID, created.ID, nil)
+		return err
 	})
 	if err != nil {
 		return models.Order{}, err
@@ -253,9 +256,12 @@ func priceToCents(price string) (int64, error) {
 func centsToPrice(cents int64) string { return fmt.Sprintf("%d.%02d", cents/100, cents%100) }
 
 func (s *OrderService) Get(ctx context.Context, actor models.User, id uint64) (models.Order, error) {
-	query := s.authorizedQuery(s.db.WithContext(ctx).Model(&models.Order{}), actor)
+	query, err := s.authorizedQuery(s.db.WithContext(ctx).Model(&models.Order{}), actor)
+	if err != nil {
+		return models.Order{}, err
+	}
 	var order models.Order
-	err := preloadOrder(query).Where("orders.id = ?", id).First(&order).Error
+	err = preloadOrder(query).Where("orders.id = ?", id).First(&order).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return models.Order{}, ErrOrderNotFound
 	}
@@ -267,7 +273,10 @@ func (s *OrderService) Get(ctx context.Context, actor models.User, id uint64) (m
 }
 
 func (s *OrderService) List(ctx context.Context, actor models.User, filter OrderFilter) ([]models.Order, PageData, error) {
-	query := s.authorizedQuery(s.db.WithContext(ctx).Model(&models.Order{}), actor)
+	query, err := s.authorizedQuery(s.db.WithContext(ctx).Model(&models.Order{}), actor)
+	if err != nil {
+		return nil, PageData{}, err
+	}
 	if filter.Status != "" {
 		query = query.Where("orders.status = ?", filter.Status)
 	}
@@ -301,11 +310,15 @@ func (s *OrderService) List(ctx context.Context, actor models.User, filter Order
 	return items, pageData(filter.Page, filter.Limit, total), nil
 }
 
-func (s *OrderService) authorizedQuery(query *gorm.DB, actor models.User) *gorm.DB {
-	if actor.Role == models.RoleWashStaff {
-		return query.Joins("JOIN order_staff os_access ON os_access.order_id = orders.id AND os_access.user_id = ?", actor.ID)
+func (s *OrderService) authorizedQuery(query *gorm.DB, actor models.User) (*gorm.DB, error) {
+	switch actor.Role {
+	case models.RoleAdmin, models.RoleManager:
+		return query, nil
+	case models.RoleWashStaff:
+		return query.Joins("JOIN order_staff os_access ON os_access.order_id = orders.id AND os_access.user_id = ?", actor.ID), nil
+	default:
+		return nil, ErrOrderForbidden
 	}
-	return query
 }
 
 func preloadOrder(query *gorm.DB) *gorm.DB {
@@ -322,7 +335,7 @@ func (s *OrderService) Update(ctx context.Context, actor models.User, id uint64,
 	if input.Version == 0 {
 		return models.Order{}, FieldError{Field: "version", Message: "Order version is required"}
 	}
-	if input.VehicleID == nil && input.ServiceIDs == nil && input.StaffIDs == nil && input.EstimatedDeliveryAt == nil {
+	if input.VehicleID == nil && input.ServiceIDs == nil && input.StaffIDs == nil && input.EstimatedDeliveryAt == nil && input.InvoiceRequested == nil {
 		return models.Order{}, FieldError{Field: "order", Message: "Provide at least one change"}
 	}
 	err := s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
@@ -339,10 +352,10 @@ func (s *OrderService) Update(ctx context.Context, actor models.User, id uint64,
 		if current.Status != models.OrderPending && current.Status != models.OrderInProgress {
 			return ErrOrderNotEditable
 		}
-		if current.Status == models.OrderInProgress && (input.VehicleID != nil || input.ServiceIDs != nil) {
+		if current.Status == models.OrderInProgress && (input.VehicleID != nil || input.ServiceIDs != nil || input.InvoiceRequested != nil) {
 			return ErrOrderNotEditable
 		}
-		if input.VehicleID != nil || input.ServiceIDs != nil {
+		if input.VehicleID != nil || input.ServiceIDs != nil || input.InvoiceRequested != nil {
 			hasPayment, err := hasValidPayment(tx, id)
 			if err != nil {
 				return err
@@ -352,6 +365,9 @@ func (s *OrderService) Update(ctx context.Context, actor models.User, id uint64,
 			}
 		}
 		updates := map[string]any{"version": current.Version + 1}
+		if input.InvoiceRequested != nil {
+			updates["invoice_requested"] = *input.InvoiceRequested
+		}
 		vehicleID := current.VehicleID
 		if input.VehicleID != nil {
 			vehicleID = *input.VehicleID
@@ -421,6 +437,9 @@ func (s *OrderService) Update(ctx context.Context, actor models.User, id uint64,
 }
 
 func (s *OrderService) Transition(ctx context.Context, actor models.User, id uint64, input TransitionOrderInput) (models.Order, error) {
+	if actor.Role != models.RoleAdmin && actor.Role != models.RoleManager && actor.Role != models.RoleWashStaff {
+		return models.Order{}, ErrOrderForbidden
+	}
 	input.Target = strings.ToUpper(strings.TrimSpace(input.Target))
 	input.Reason = strings.Join(strings.Fields(input.Reason), " ")
 	if input.Version == 0 {

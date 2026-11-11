@@ -18,6 +18,7 @@ type registerPaymentRequest struct {
 	ExternalReference string `json:"external_reference"`
 	IdempotencyKey    string `json:"idempotency_key"`
 	Deliver           bool   `json:"deliver"`
+	InvoiceRequested  *bool  `json:"invoice_requested"`
 }
 
 type voidPaymentRequest struct {
@@ -31,6 +32,7 @@ type correctPaymentRequest struct {
 	ExternalReference string `json:"external_reference"`
 	IdempotencyKey    string `json:"idempotency_key"`
 	Reason            string `json:"reason"`
+	InvoiceRequested  *bool  `json:"invoice_requested"`
 }
 
 type reviewPaymentRequest struct {

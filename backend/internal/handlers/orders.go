@@ -19,6 +19,7 @@ type createOrderRequest struct {
 	ServiceIDs          []uint64  `json:"service_ids"`
 	StaffIDs            []uint64  `json:"staff_ids"`
 	EstimatedDeliveryAt time.Time `json:"estimated_delivery_at"`
+	InvoiceRequested    bool      `json:"invoice_requested"`
 }
 
 type updateOrderRequest struct {
@@ -27,6 +28,7 @@ type updateOrderRequest struct {
 	ServiceIDs          *[]uint64  `json:"service_ids"`
 	StaffIDs            *[]uint64  `json:"staff_ids"`
 	EstimatedDeliveryAt *time.Time `json:"estimated_delivery_at"`
+	InvoiceRequested    *bool      `json:"invoice_requested"`
 }
 
 type transitionOrderRequest struct {
