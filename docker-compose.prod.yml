@@ -1,3 +1,4 @@
+name: camell-wash
 services:
   postgres:
     image: postgres:16-alpine
@@ -6,17 +7,55 @@ services:
       POSTGRES_DB: ${DB_NAME:?DB_NAME is required}
       POSTGRES_USER: ${DB_USER:?DB_USER is required}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+    - postgres_data:/var/lib/postgresql/data
     networks:
-      - starter_internal
+    - starter_internal
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U ${DB_USER} -d ${DB_NAME}
       interval: 10s
       timeout: 5s
       retries: 10
-
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 768m
+    pids_limit: 128
+  db_permissions:
+    image: postgres:16-alpine
+    restart: 'no'
+    user: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command:
+    - sh
+    - /scripts/grant-runtime-db.sh
+    environment:
+      PGHOST: postgres
+      PGPORT: '5432'
+      PGDATABASE: ${DB_NAME:?DB_NAME is required}
+      PGUSER: ${DB_USER:?DB_USER is required}
+      PGPASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_APP_USER: ${DB_APP_USER:?DB_APP_USER is required}
+      DB_APP_PASSWORD: ${DB_APP_PASSWORD:?DB_APP_PASSWORD is required}
+    volumes:
+    - ./scripts/grant-runtime-db.sh:/scripts/grant-runtime-db.sh:ro
+    networks:
+    - starter_internal
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 128
+    cap_drop:
+    - ALL
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
   backend:
     build:
       context: ./backend
@@ -26,6 +65,8 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      db_permissions:
+        condition: service_completed_successfully
     environment:
       APP_ENV: production
       LOG_LEVEL: ${LOG_LEVEL:-info}
@@ -33,15 +74,15 @@ services:
       SERVER_PORT: 8080
       DB_HOST: postgres
       DB_PORT: 5432
-      DB_USER: ${DB_USER:?DB_USER is required}
-      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_USER: ${DB_APP_USER:?DB_APP_USER is required}
+      DB_PASSWORD: ${DB_APP_PASSWORD:?DB_APP_PASSWORD is required}
       DB_NAME: ${DB_NAME:?DB_NAME is required}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
-      DB_AUTO_MIGRATE: "false"
+      DB_AUTO_MIGRATE: 'false'
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
       SESSION_TTL: ${SESSION_TTL:-12h}
       SESSION_IDLE_TIMEOUT: ${SESSION_IDLE_TIMEOUT:-30m}
-      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SECURE: 'true'
       AUTH_COOKIE_SAME_SITE: ${AUTH_COOKIE_SAME_SITE:-lax}
       PASSWORD_BCRYPT_COST: ${PASSWORD_BCRYPT_COST:-12}
       LOGIN_MAX_ATTEMPTS: ${LOGIN_MAX_ATTEMPTS:-5}
@@ -49,23 +90,39 @@ services:
       AUTH_RATE_LIMIT_PER_MINUTE: ${AUTH_RATE_LIMIT_PER_MINUTE:-10}
       API_RATE_LIMIT_PER_MINUTE: ${API_RATE_LIMIT_PER_MINUTE:-120}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
-      TRUST_PROXY: "true"
+      TRUST_PROXY: 'true'
     networks:
-      - starter_internal
+    - starter_internal
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test:
+      - CMD
+      - wget
+      - --quiet
+      - --tries=1
+      - -O
+      - /dev/null
+      - http://127.0.0.1:8080/health
       interval: 15s
       timeout: 5s
       retries: 5
-
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 128
+    cap_drop:
+    - ALL
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
   migrate:
     build:
       context: ./backend
-    restart: "no"
+    restart: 'no'
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["/app/migrate"]
+    command:
+    - /app/migrate
     environment:
       APP_ENV: production
       SERVER_HOST: 0.0.0.0
@@ -77,11 +134,19 @@ services:
       DB_NAME: ${DB_NAME:?DB_NAME is required}
       DB_SSLMODE: ${DB_SSLMODE:-disable}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
-      AUTH_COOKIE_SECURE: "true"
+      AUTH_COOKIE_SECURE: 'true'
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?ALLOWED_ORIGINS is required}
     networks:
-      - starter_internal
-
+    - starter_internal
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 256m
+    pids_limit: 128
+    cap_drop:
+    - ALL
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
   frontend:
     build:
       context: ./frontend
@@ -97,34 +162,61 @@ services:
       NUXT_PUBLIC_APP_NAME: ${APP_NAME:-Base Starter}
       NUXT_PUBLIC_APP_SHORT_NAME: ${APP_SHORT_NAME:-Starter}
     networks:
-      - starter_internal
+    - starter_internal
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      test:
+      - CMD
+      - wget
+      - --quiet
+      - --tries=1
+      - -O
+      - /dev/null
+      - http://127.0.0.1:3000/
       interval: 15s
       timeout: 5s
       retries: 5
-
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 768m
+    pids_limit: 128
+    cap_drop:
+    - ALL
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m,mode=1777
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.30.6-alpine
     restart: always
     depends_on:
-      - backend
-      - frontend
+    - backend
+    - frontend
     ports:
-      - "80:80"
+    - 127.0.0.1:8090:80
     volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
-      - starter_internal
+    - starter_internal
+    - camell_edge
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      test:
+      - CMD
+      - wget
+      - --quiet
+      - --tries=1
+      - -O
+      - /dev/null
+      - http://127.0.0.1/health
       interval: 15s
       timeout: 5s
       retries: 5
-
+    security_opt:
+    - no-new-privileges:true
+    mem_limit: 128m
+    pids_limit: 128
 networks:
+  camell_edge:
+    driver: bridge
   starter_internal:
     internal: true
-
 volumes:
-  postgres_data:
+  postgres_data: null

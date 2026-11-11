@@ -7,7 +7,7 @@ Plantilla full-stack reutilizable para iniciar aplicaciones con autenticación, 
 ```text
 Browser
   └─ Nuxt 4 / Vue 3 / Pinia / PrimeVue
-       └─ API JSON Go 1.25 / Gorilla Mux / GORM
+       └─ API JSON Go 1.26 / Gorilla Mux / GORM
             └─ PostgreSQL 16
 ```
 
@@ -23,7 +23,7 @@ Browser
 
 ## Requisitos
 
-- Go 1.25.12 o compatible con el `go.mod`.
+- Go 1.26.10 o compatible con el `go.mod`.
 - Node.js 22 y npm.
 - PostgreSQL 16 o 17.
 - Docker Compose, opcional pero recomendado.
